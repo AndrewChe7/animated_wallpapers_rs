@@ -2,6 +2,7 @@
 name = "animated_wallpapers_rs"
 version = "0.1.0"
 edition = "2021"
+authors = ["Andrew Chernyakov <chernjakov2@gmail.com>"]
 
 [[bin]]
 name = "animated_wallpapers_cli"
@@ -15,3 +16,8 @@ rune = "0.12"
 tokio = { version = "1.28", features = ["full"]  }
 clap = { version = "4.3", features = ["cargo"] }
 chrono = "0.4"
+winit = "0.28"
+egui = "0.22"
+tray-icon = "0.6"
+rfd = "0.11"
+lazy_static = "1.4"

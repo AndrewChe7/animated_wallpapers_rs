@@ -127,13 +127,13 @@ pub fn module() -> Result<Module, ContextError> {
 }
 
 impl Generator {
-    pub async fn new(path: &PathBuf) -> Self {
+    pub fn new(path: PathBuf) -> Self {
         let m = module().expect("Can't load wallpaper builder module");
         let mut context = Context::with_default_modules().expect("Can't create context");
         context.install(m).expect("Can't install module");
         let mut diagnostics = Diagnostics::new();
         let mut sources = Sources::new();
-        sources.insert(Source::from_path(path).expect("Can't load script"));
+        sources.insert(Source::from_path(&path).expect("Can't load script"));
         let result = rune::prepare(&mut sources)
             .with_context(&context)
             .with_diagnostics(&mut diagnostics)
