@@ -1,11 +1,14 @@
 #![allow(unused)]
 
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use std::time::Duration;
+use tokio::sync::RwLock;
 use egui::epaint::stats;
 use egui::FontDefinitions;
 use egui_wgpu_backend::ScreenDescriptor;
 use egui_winit_platform::{Platform, PlatformDescriptor};
 use lazy_static::lazy_static;
+use tokio::time::sleep;
 use tray_icon::{ClickEvent, menu::{AboutMetadata, Menu, MenuEvent, MenuItem, PredefinedMenuItem}, TrayIconBuilder};
 
 use tray_icon::TrayEvent;
@@ -15,6 +18,7 @@ use winit::event::Event;
 use winit::event::WindowEvent;
 
 use winit::event_loop::{ControlFlow, EventLoopBuilder};
+use winit::platform::windows::EventLoopBuilderExtWindows;
 use winit::window::{Window, WindowBuilder};
 use animated_wallpapers_rs::image_generator::Generator;
 
@@ -27,27 +31,37 @@ struct SettingWindowState {
     window: Window,
     platform: Platform,
     egui_rpass: egui_wgpu_backend::RenderPass,
-    egui_demo: egui_demo_lib::DemoWindows,
 }
 
 struct State {
     generator: Option<Generator>,
     show_window: bool,
-    runtime: tokio::runtime::Runtime,
 }
 
 lazy_static! {
     static ref STATE: Arc<RwLock<State>> = Arc::new(RwLock::new(State {
         generator: None,
         show_window: false,
-        runtime: tokio::runtime::Runtime::new()
-            .expect("Can't create tokio runtime"),
     }));
+}
+
+async fn worker() {
+    loop {
+        let mut state = STATE.write().await;
+        if let Some(generator) = state.generator.as_mut() {
+            generator.update().await;
+            let mut path = std::env::current_dir().unwrap();
+            path.push("test.png");
+            wallpaper::set_from_path(path.to_str().unwrap()).unwrap();
+        }
+        sleep(Duration::from_millis(500)).await;
+    }
 }
 
 fn main() {
     let path = "./icon.png";
     let icon = load_icon(std::path::Path::new(path));
+    let runtime = tokio::runtime::Runtime::new().expect("Can't create tokio runtime");
 
     // Since winit doesn't use gtk on Linux, and we need gtk for
     // the tray icon to show up, we need to spawn a thread
@@ -66,7 +80,7 @@ fn main() {
         gtk::main();
     });
 
-    let event_loop = EventLoopBuilder::new().build();
+    let event_loop = EventLoopBuilder::new().with_any_thread(true).build();
 
     #[cfg(not(target_os = "linux"))]
         let mut tray_icon = Some(
@@ -83,9 +97,12 @@ fn main() {
 
     let mut settings_window: Option<SettingWindowState> = None;
 
+    runtime.spawn(async {
+        worker().await;
+    });
+
     event_loop.run(move |event, event_loop, control_flow| {
         *control_flow = ControlFlow::Poll;
-
         if let Some(settings_window_state) = settings_window.as_mut() {
             settings_window_state.platform.handle_event(&event);
             match event {
@@ -96,7 +113,8 @@ fn main() {
                     match event {
                         WindowEvent::CloseRequested => {
                             settings_window = None;
-                            STATE.write().unwrap().show_window = false;
+                            let mut state = runtime.block_on(STATE.write());
+                            state.show_window = false;
                         }
                         _ => (),
                     }
@@ -123,7 +141,12 @@ fn main() {
                                         .set_directory(&path)
                                         .pick_file();
                                     if let Some(file) = res {
-                                        STATE.write().unwrap().generator.insert(Generator::new(file));
+                                        let mut state = runtime.block_on(STATE.write());
+                                        let mut dir = file.clone();
+                                        dir.pop();
+                                        std::env::set_current_dir(dir);
+                                        state.generator.insert(Generator::new(file));
+                                        wallpaper::set_mode(wallpaper::Mode::Fit).unwrap();
                                     }
                                 }
                             });
@@ -178,8 +201,6 @@ fn main() {
                 }
                 _ => (),
             }
-
-
         }
 
         if let Ok(event) = tray_channel.try_recv() {
@@ -196,15 +217,15 @@ fn main() {
                 }
             }
 
-            if STATE.read().unwrap().show_window {
+            let mut state = runtime.block_on(STATE.write());
+            if state.show_window {
                 return;
             }
 
             if !show_window {
                 return;
             }
-
-            STATE.write().unwrap().show_window = true;
+            state.show_window = true;
             let window = WindowBuilder::new()
                 .with_title("Settings")
                 .with_inner_size(PhysicalSize::new(500, 250))
@@ -212,7 +233,6 @@ fn main() {
                 .with_active(true)
                 .build(&event_loop).unwrap();
 
-            let state = STATE.write().unwrap();
             let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
                 backends: wgpu::Backends::PRIMARY,
                 dx12_shader_compiler: Default::default(),
@@ -220,14 +240,14 @@ fn main() {
             let surface = unsafe { instance.create_surface(&window).unwrap() };
 
             // WGPU 0.11+ support force fallback (if HW implementation not supported), set it to true or false (optional).
-            let adapter = state.runtime.block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::HighPerformance,
+            let adapter = runtime.block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+                power_preference: wgpu::PowerPreference::LowPower,
                 compatible_surface: Some(&surface),
                 force_fallback_adapter: false,
             }))
                 .unwrap();
 
-            let (device, queue) = state.runtime.block_on(adapter.request_device(
+            let (device, queue) = runtime.block_on(adapter.request_device(
                 &wgpu::DeviceDescriptor {
                     features: wgpu::Features::default(),
                     limits: wgpu::Limits::default(),
@@ -264,7 +284,6 @@ fn main() {
             });
 
             let egui_rpass = egui_wgpu_backend::RenderPass::new(&device, surface_format, 1);
-            let egui_demo = egui_demo_lib::DemoWindows::default();
 
             let _ = settings_window.insert(
                 SettingWindowState {
@@ -276,7 +295,6 @@ fn main() {
                     window,
                     platform,
                     egui_rpass,
-                    egui_demo,
                 }
             );
         }

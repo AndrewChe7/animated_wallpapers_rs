@@ -1,0 +1,34 @@
+
+pub fn init() {
+    1
+}
+
+// 130x384
+fn append_divergence_meter(wallpaper, x, sx, sy, v) {
+    let x_pos = x * 130;
+    let y_pos = sy - 384;
+    let path = format!("./divergence_meter/{}.png", v);
+    wallpaper.append_image(path, x_pos, y_pos)
+}
+
+pub fn update(wallpaper, frame, hours, minutes, seconds) {
+    let size = [2560, 1440];
+    wallpaper = wallpaper
+        .vertical_gradient([45, 45, 45], [0, 0, 0], [0, 0, 0], size[0] , size[1])
+        .append_image("./divergence_meter/makise_kurisu.png", size[0] - 900, size[1] - 1315);
+    let chars = [];
+    chars.push(hours / 10);
+    chars.push(hours % 10);
+    chars.push(minutes / 10);
+    chars.push(minutes % 10);
+    chars.push(seconds / 10);
+    chars.push(seconds % 10);
+    wallpaper = append_divergence_meter(wallpaper, 1, size[0], size[1], 0);
+    wallpaper = append_divergence_meter(wallpaper, 2, size[0], size[1], "point");
+    for v in chars.iter().enumerate() {
+        let x = v[0];
+        let c = v[1];
+        wallpaper = append_divergence_meter(wallpaper, x + 3, size[0], size[1], c);
+    }
+    wallpaper
+}
