@@ -3,6 +3,7 @@ name = "animated_wallpapers_rs"
 version = "0.1.0"
 edition = "2021"
 authors = ["Andrew Chernyakov <chernjakov2@gmail.com>"]
+build = "build.rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
