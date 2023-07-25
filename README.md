@@ -21,3 +21,8 @@ In scripts must be two functions:
 pub fn init(); // returns frame count for animated GIFs (not implemented yet)
 pub fn update(wallpaper, frame, hours, minutes, seconds); // returns final wallpaper
 ```
+
+# Usage
+
+Run executable, the tray icon appears. Right click on tray icon will close application, left click opens settings window. In settings window You
+could choose script. After script is choosen wallpaper will be updated.
